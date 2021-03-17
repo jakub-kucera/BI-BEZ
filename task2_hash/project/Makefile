@@ -1,9 +1,9 @@
 CC = gcc
-CFLAGS = -Wall -pedantic -Wno-long-long -g
+CFLAGS = -std=c11 -Wall -pedantic -Wno-long-long -g
 LDFLAGS = -lcrypto
 
 all: hash
-run: hash
+run: all
 	python test.py
 clean:
 	rm -f *.o hash

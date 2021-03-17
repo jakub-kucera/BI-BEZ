@@ -9,7 +9,7 @@ debug = False
 for i in range(0, 23):  # number of 0 leading bits
     numOfErrors = 0
     for j in range(1):  # number of iterations for the same number of bits
-        streamProject = os.popen('./hash ' + str(i))
+        streamProject = os.popen("./hash {}".format(i))
         streamProjectOutput = streamProject.read().split()
 
         streamTest = os.popen('echo -n "{}" | xxd -r -ps | openssl sha384'.format(streamProjectOutput[0]))
@@ -25,7 +25,11 @@ for i in range(0, 23):  # number of 0 leading bits
                 print("Test output: {}".format(streamTestOutput))
         else:
             if debug:
+                print("OK")
                 print("0bits: {}".format(i))
                 print("Input: {}".format(streamProjectOutput[0]))
                 print("Output: {}".format(streamProjectOutput[1]))
-    print("{} 0-bits errors: {}".format(i, numOfErrors))
+    if numOfErrors:
+        print("{} 0-bits: {} errors".format(i, numOfErrors))
+    else:
+        print("{} 0-bits: OK".format(i, numOfErrors))

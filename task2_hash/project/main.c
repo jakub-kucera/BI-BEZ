@@ -1,70 +1,69 @@
 #include <stdio.h>
-#include <string.h>
-#include <openssl/evp.h>
+#include <openssl/sha.h>
+#include <stdlib.h>
 
-static const int INPUT_ARRAY_SIZE = 48;
+#ifdef __linux__
+
+#include <sys/auxv.h>
+
+#elif
+#include <bits/types/time_t.h>
+#include <time.h>
+#endif
+
+static const int MAX_HASH_SIZE = 48;
 
 int main(int argc, char *argv[]) {
-
     int numOfZeros;
     /* check input argument */
+    if (argc == 1) {
+        fprintf(stderr, "usage: %s n\n", argv[0]);
+        fprintf(stderr, "\tn: expected number of leading 0-bits in outputted SHA-384 hash.\n");
+        return 6;
+    }
+
     if (argc != 2
         || sscanf(argv[1], " %d ", &numOfZeros) != 1
         || numOfZeros < 0
         || numOfZeros > 384) {
-        return 6;
+        return 7;
     }
-    time_t t;
     /* initializes rand function */
+    /*If program is compiled on linux, then random function is initialized using a more random seed.*/
+#ifdef __linux__
+    srand((unsigned int) getauxval(AT_RANDOM));
+#elif
+    time_t t;
     srand((unsigned) time(&t));
+#endif
 
     /* 48*8=384; input size == output size; using smaller input size might cause inability to generate wanted output values */
-    unsigned char inputToHash[INPUT_ARRAY_SIZE];
-    char hashFunction[] = "sha384";  /* zvolena hashovaci funkce ("sha1", "md5", ...) */
+    unsigned char inputToHash[MAX_HASH_SIZE];
 
-    EVP_MD_CTX *ctx;  /* struktura kontextu */
-    const EVP_MD *type; /* typ pouzite hashovaci funkce  */
-    unsigned char hash[EVP_MAX_MD_SIZE]; /* char pole pro hash - 64 bytu (max pro sha 512)  */
-    unsigned int length;  /* vysledna delka hashe  */
-
-    /* Inicializace OpenSSL hash funkci */
-    OpenSSL_add_all_digests();
-    /* Zjisteni, jaka hashovaci funkce ma byt pouzita */
-    type = EVP_get_digestbyname(hashFunction);
-
-    /* Pokud predchozi prirazeni vratilo -1, tak nebyla zadana spravne hashovaci funkce */
-    if (!type) {
-        printf("Hash %s neexistuje.\n", hashFunction);
-        return 1;
-    }
-
-    /* create context for hashing  */
-    ctx = EVP_MD_CTX_new();
-    if (ctx == NULL)
-        return 2;
-
+    SHA512_CTX shaCtx; /* Context for SHA function */
+    unsigned char hash[MAX_HASH_SIZE]; /* char array for hash */
 
     /* init input array */
-    for (int i = 0; i < INPUT_ARRAY_SIZE; i++) {
+    for (int i = 0; i < MAX_HASH_SIZE; i++) {
         inputToHash[i] = 0;
     }
 
     while (1) {
-
-        inputToHash[rand() % INPUT_ARRAY_SIZE]++; /* increments random element in array  */
+        inputToHash[rand() % MAX_HASH_SIZE]++; /* increments random element in array */
 
         /* Hash the text */
-        if (!EVP_DigestInit_ex(ctx, type, NULL)) /* context setup for our hash type */
+        if (!SHA384_Init(&shaCtx)) { /* context setup for our hash type */
             return 3;
+        }
 
-        if (!EVP_DigestUpdate(ctx, inputToHash, INPUT_ARRAY_SIZE)) /* feed the message in */
+        if (!SHA384_Update(&shaCtx, inputToHash, MAX_HASH_SIZE)) {/* feed the message in */
             return 4;
+        }
 
-        if (!EVP_DigestFinal_ex(ctx, hash, &length)) /* get the hash */
+        if (!SHA384_Final(hash, &shaCtx)) {/* get the hash */
             return 5;
+        }
 
-
-        /* bool nextIteration = false; */
         uint8_t nextIteration = 0;
         /* goes by entire bytes */
         for (int i = 0; i < numOfZeros / 8; i++) {
@@ -79,17 +78,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-
-    EVP_MD_CTX_free(ctx); /* destroy the context */
-
     /* Write hash function input data*/
-    for (int i = 0; i < INPUT_ARRAY_SIZE; i++) {
+    for (int i = 0; i < MAX_HASH_SIZE; i++) {
         printf("%02x", inputToHash[i]);
     }
     printf("\n");
 
     /* Write output hash */
-    for (unsigned int i = 0; i < length; i++)
+    for (unsigned int i = 0; i < MAX_HASH_SIZE; i++)
         printf("%02x", hash[i]);
     printf("\n");
     return 0;
