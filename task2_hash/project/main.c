@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
     printf("\n");
 
     /* Write output hash */
-    for (unsigned int i = 0; i < MAX_HASH_SIZE; i++)
+    for (int i = 0; i < MAX_HASH_SIZE; i++)
         printf("%02x", hash[i]);
     printf("\n");
     return 0;
