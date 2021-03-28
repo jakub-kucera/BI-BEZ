@@ -1,0 +1,10 @@
+name: bibez
+channels:
+- conda-forge
+dependencies:
+- python=>3.6
+- pyOpenSSL
+- pyCryptodome
+- pycrypto
+
+
