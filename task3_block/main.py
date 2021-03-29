@@ -1,3 +1,6 @@
+# Author Jakub Kucera <kucerj56@fit.cvut.cz>
+# Date  28.3.2021
+import os
 import sys
 from argparse import ArgumentParser
 from Crypto.Cipher import AES
@@ -5,96 +8,104 @@ from Crypto.Random import get_random_bytes
 from Crypto.Util import Padding
 
 BUFFER_SIZE = 1024
-KEY_SIZE = 16
-
-# crypto_function = {True: cipher.encrypt, False: cipher.encrypt}
-# (encrypt/decrypt, ECB/CBC)
-FILE_EXTENSIONS_MODE = {"ECB": "_ecb", "CBC": "_cbc"}
+BLOCK_SIZE = 16
+IV_SIZE = 16
+KEY_DEFAULT = b"0123456789ABCDEF"
+IV_DEFAULT = b'FEDCBA9876543210'
+FILE_EXTENSION_MODES = {True: "_ecb", False: "_cbc"}
 FILE_DECRYPTED_EXTENSION = "_dec"
 FILE_TYPE_EXTENSION = ".tga"
 
-# creates argument parser
-parser = ArgumentParser(description="Encrypts/Decrypts image files using the AES cipher with ECB/CBC mode.")
 
-# Adds program arguments
-parser.add_argument("-e", "--encrypt",
-                    default=False,
-                    action='store_true',
-                    # choices=["-e", "-d"],
-                    help="choose to encrypt/decrypt")
-parser.add_argument("-d", "--decrypt",
-                    default=False,
-                    action='store_true',
-                    help="choose to encrypt/decrypt")
-parser.add_argument("operation_mode",
-                    default="ECB",
-                    choices=["ECB", "CBC"],
-                    help="display $ at end of each line")
-parser.add_argument("file",
-                    help="file to encrypt/decrypt")
+def crypt_image(file: str, use_ecb: bool = True, encrypt: bool = True, key: bytearray = KEY_DEFAULT,
+                iv: bytearray = IV_DEFAULT):
+    # check if file exists
+    if not os.path.isfile(file):
+        return 2
 
-if __name__ == "__main__":
-
-    # creates namespace with arguments
-    args = parser.parse_args()
-
-    if args.encrypt == args.decrypt:
-        print("invalid -e -d args")
-        print(parser.print_help())
-        sys.exit(1)
-        # todo make better
-
-    print(args)
-
-    # opening file with "with" takes care of exception handling, closing file
-    with open(args.file, mode="rb") as f_in:
-
-        file_name = args.file[:-4]
-        if args.encrypt:
-            file_name += FILE_EXTENSIONS_MODE[args.operation_mode] + FILE_TYPE_EXTENSION
-        else:
-            file_name += FILE_DECRYPTED_EXTENSION + FILE_TYPE_EXTENSION
-        print(args.file)
-        print(file_name)
-
+    # opens file
+    with open(file, mode="rb") as file_in:
         # reads beginning of header with constant size
-        header = f_in.read(18)
-        if header == -1:
-            sys.exit(1)
+        header = file_in.read(18)
+        if len(header) != 18:
+            return 3
         id_length = int(header[0])
         colormap_entry_count = int.from_bytes(header[5:7], byteorder='little')
         colormap_entry_size = int(header[7])
 
-        print(header)
-        # print(id_length)
-        # print(colormap_entry_count)
-        # print(colormap_entry_size)
-
+        # exits program when header data is corrupted
         if (colormap_entry_count * colormap_entry_size) % 8 != 0:
-            sys.exit(1)
+            return 4
 
         # reads rest of header with variable size
-        header_extra = f_in.read(int(id_length + colormap_entry_count * colormap_entry_size / 8))
-        if header_extra == -1:
-            sys.exit(1)
+        extra_header_size = int(id_length + colormap_entry_count * colormap_entry_size / 8)
+        header_extra = file_in.read(extra_header_size)
+        if len(header_extra) != extra_header_size:
+            return 5
         header += header_extra
-        print(header)
 
-        key = get_random_bytes(KEY_SIZE)
-        cipher = AES.new(key, AES.MODE_ECB)
+        # gets output file name
+        file_name = file[:-4]
 
-        # ciphertext, tag = cipher.encrypt_and_digest(data)
+        file_name += FILE_EXTENSION_MODES[use_ecb] if encrypt else FILE_DECRYPTED_EXTENSION
+        file_name += FILE_TYPE_EXTENSION
 
-        with open(file_name, "wb") as f_out:
-            f_out.write(header)
-            file_not_empty = True
-            while file_not_empty:
-                input_buffer = f_in.read(BUFFER_SIZE)
-                if len(input_buffer) != BUFFER_SIZE:
-                    input_buffer = Padding.pad(input_buffer, KEY_SIZE, style='pkcs7')
-                    file_not_empty = False
-                # out_buffer = bytearray(1024)
+        # creates AES object with its operation mode, key and optional IV
+        cipher = AES.new(key, AES.MODE_ECB) if use_ecb else AES.new(key, AES.MODE_CBC, iv=iv)
+        crypt_function = cipher.encrypt if encrypt else cipher.decrypt
+
+        # writes to output file
+        with open(file_name, "wb") as file_out:
+            # copies header data
+            file_out.write(header)
+            file_empty = False
+            # decrypts/encrypts data
+            while not file_empty:
+                input_buffer = file_in.read(BUFFER_SIZE)
+                # checks if last block has been read during encryption
+                if len(input_buffer) != BUFFER_SIZE and encrypt:
+                    input_buffer = Padding.pad(input_buffer, BLOCK_SIZE, style='pkcs7')
+                    file_empty = True
+
+                # sends buffered data to output crypto function
                 out_buffer = bytearray(len(input_buffer))
-                cipher.encrypt(input_buffer, output=out_buffer)
+                crypt_function(input_buffer, output=out_buffer)
 
-                f_out.write(out_buffer)
+                # checks if last block has been read during decryption
+                if len(out_buffer) != BUFFER_SIZE and not encrypt:
+                    out_buffer = Padding.unpad(out_buffer, BLOCK_SIZE, style='pkcs7')
+                    file_empty = True
+                file_out.write(out_buffer)
+    return 0
+
+
+if __name__ == "__main__":
+    # creates argument parser
+    parser = ArgumentParser(description="Encrypts/Decrypts image files using the AES cipher with ECB/CBC mode.")
+
+    # Adds program arguments
+    parser.add_argument("-e", "--encrypt",
+                        default=False,
+                        action='store_true',
+                        help="choose to encrypt")
+    parser.add_argument("-d", "--decrypt",
+                        default=False,
+                        action='store_true',
+                        help="choose to decrypt")
+    parser.add_argument("operation_mode",
+                        choices=["ECB", "CBC"],
+                        help="display $ at end of each line")
+    parser.add_argument("file",
+                        help="file to encrypt/decrypt")
+
+    # loads arguments
+    args = parser.parse_args()
+
+    # checks if only one flag is enabled
+    if args.encrypt == args.decrypt:
+        print(parser.print_help())
+        sys.exit(1)
+
+    # key = get_random_bytes(BLOCK_SIZE)
+    returned = crypt_image(args.file, args.operation_mode == "ECB", args.encrypt)
+    sys.exit(returned)
