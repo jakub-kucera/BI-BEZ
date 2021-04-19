@@ -12,20 +12,15 @@ BUFFER_SIZE = 1024
 BLOCK_SIZE = 16
 BYTEORDER = 'little'
 CYPHERS = {1: AES}
-CYPHER_LENGTHS = {0: 128, 1: 256, 2: 384, 3: 512}
-CYPHER_MODES = {1: AES.MODE_CBC, 2: AES.MODE_CCM, 3:AES.MODE_CFB}
+CYPHER_CODE_TO_LENGTH = {0: 128, 1: 256, 2: 384, 3: 512}
+CYPHER_LENGTH_TO_CODE = dict([(length, code) for code, length in CYPHER_CODE_TO_LENGTH.items()])
+CYPHER_MODES = {1: AES.MODE_CBC, 2: AES.MODE_CCM, 3: AES.MODE_CFB}
 
 
 def encrypt_file(recipient_public_key: RSA.RsaKey, in_file_name: str, out_file_name: str):
 
     # opens destination file
     with open(out_file_name, mode="wb") as out_file:
-        # writes code for cypher name
-        out_file.write(int(1).to_bytes(1, byteorder=BYTEORDER, signed=False))
-        # writes code for cypher key length
-        out_file.write(int(1).to_bytes(1, byteorder=BYTEORDER, signed=False))
-        # writes code for cypher operation mode
-        out_file.write(int(1).to_bytes(1, byteorder=BYTEORDER, signed=False))
 
         # loads recipients public rsa key from file
         # recipient_public_key = RSA.import_key(open(key_file_name).read())
@@ -35,7 +30,19 @@ def encrypt_file(recipient_public_key: RSA.RsaKey, in_file_name: str, out_file_n
         session_key = get_random_bytes(BLOCK_SIZE)
         encrypted_session_key = cipher_rsa.encrypt(session_key)
         encrypted_key_len = len(encrypted_session_key)
-        print(f"encrypted_key_len: {encrypted_key_len}")
+
+        if encrypted_key_len not in CYPHER_LENGTH_TO_CODE:
+            return 12
+
+        encrypted_key_len_code = CYPHER_LENGTH_TO_CODE[encrypted_key_len]
+
+        # writes code for cypher name
+        out_file.write(int(1).to_bytes(1, byteorder=BYTEORDER, signed=False))
+        # writes code for cypher key length
+        out_file.write(int(encrypted_key_len_code).to_bytes(1, byteorder=BYTEORDER, signed=False))
+        # writes code for cypher operation mode
+        out_file.write(int(1).to_bytes(1, byteorder=BYTEORDER, signed=False))
+
         out_file.write(encrypted_session_key)
 
         # generate random initialization vector and writes it to file
@@ -74,11 +81,11 @@ def decrypt_file(private_key: RSA.RsaKey, in_file_name: str, out_file_name: str)
 
         # checks if codes are valid
         if cypher_code not in CYPHERS \
-                or cypher_length_code not in CYPHER_LENGTHS \
+                or cypher_length_code not in CYPHER_CODE_TO_LENGTH \
                 or cypher_mode_code not in CYPHER_MODES:
             return 9
 
-        cypher_key_length = CYPHER_LENGTHS[cypher_length_code]
+        cypher_key_length = CYPHER_CODE_TO_LENGTH[cypher_length_code]
 
         # reads encrypted symmetric key
         encrypted_session_key = in_file.read(cypher_key_length)

@@ -12,7 +12,7 @@ PRIVATE_KEY_FILE_VALID = "privkey_for_test.pem"
 PUBLIC_KEY_FILE_VALID = "pubkey_for_test.pem"
 
 
-def test_valid(directory: str = 'tests/valid/'):
+def test_valid(directory: str = 'tests/valid/', key_length: int = 2048):
     print(50 * "=")
     print("Testing valid files:")
     file_dir = pathlib.Path(directory)
@@ -28,7 +28,7 @@ def test_valid(directory: str = 'tests/valid/'):
             original_files += [entry]
 
     # generate public and private RSA keys
-    key = RSA.generate(2048)
+    key = RSA.generate(key_length)
     private_key_generated = key.export_key()
     with open(directory + PRIVATE_KEY_FILE_VALID, "wb") as file_out:
         file_out.write(private_key_generated)
@@ -64,7 +64,6 @@ def test_valid(directory: str = 'tests/valid/'):
     print(f"Valid test: {ok_counter}/{ok_counter+bad_counter} passed")
 
     print(50 * "=")
-
 
     for entry in file_dir.iterdir():
         if entry.is_file():
@@ -122,5 +121,8 @@ def test_invalid(directory: str = 'tests/invalid/'):
 
 
 if __name__ == "__main__":
-    test_valid()
+    test_valid(key_length=1024)
+    test_valid(key_length=2048)
+    test_valid(key_length=3072)
+    test_valid(key_length=4096)
     test_invalid()
